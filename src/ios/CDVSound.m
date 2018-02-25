@@ -283,9 +283,10 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 - (void)getVolume:(CDVInvokedUrlCommand*)command
 {
     NSString* callbackId = command.callbackId;
+    float volume = [self.volume floatValue];
 
     // don't care for any callbacks
-    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:amplitude];
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:volume];
     [self.commandDelegate sendPluginResult:result callbackId:callbackId];
 }
 
