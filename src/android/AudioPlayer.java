@@ -92,6 +92,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     private MediaPlayer player = null;      // Audio player object
     private boolean prepareOnly = true;     // playback after file prepare flag
     private int seekOnPrepared = 0;     // seek to this location once media is prepared
+    private float mediaVolume = 1;
 
     /**
      * Constructor.
@@ -99,11 +100,12 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      * @param handler           The audio handler object
      * @param id                The id of this audio player
      */
-    public AudioPlayer(AudioHandler handler, String id, String file) {
+    public AudioPlayer(AudioHandler handler, String id, String file, float startVolume) {
         this.handler = handler;
         this.id = id;
         this.audioFile = file;
         this.tempFiles = new LinkedList<String>();
+        this.mediaVolume = startVolume;
     }
 
     private String generateTempFile() {
@@ -532,7 +534,17 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      *
      * @param volume
      */
+    public void getVolume() {
+        return this.mediaVolume;
+    }
+
+    /**
+     * Set the volume for audio player
+     *
+     * @param volume
+     */
     public void setVolume(float volume) {
+        this.mediaVolume = volume;
         if (this.player != null) {
             this.player.setVolume(volume, volume);
         } else {

@@ -269,11 +269,27 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
         }
 
         self.currMediaId = mediaId;
+        float volume = 1.0;
+        if ([self hasAudioSession]) {
+          volume = [[AVAudioSession sharedInstance] outputVolume]; // The linear 0.0 .. 1.0 value
+        }
+        self.volume = [NSNumber numberWithFloat:volume];
 
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:volume];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
     }
 }
+
+- (void)getVolume:(CDVInvokedUrlCommand*)command
+{
+    NSString* callbackId = command.callbackId;
+
+    // don't care for any callbacks
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:amplitude];
+    [self.commandDelegate sendPluginResult:result callbackId:callbackId];
+}
+
+
 
 - (void)setVolume:(CDVInvokedUrlCommand*)command
 {
@@ -287,12 +303,14 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:mediaId];
         if (audioFile != nil) {
             audioFile.volume = volume;
+            self.volume = volume;
             if (audioFile.player) {
                 audioFile.player.volume = [volume floatValue];
             }
             else {
                 float customVolume = [volume floatValue];
                 if (customVolume >= 0.0 && customVolume <= 1.0) {
+                    self.volume = [NSNumber numberWithFloat:customVolume];
                     [avPlayer setVolume: customVolume];
                 }
                 else {
@@ -835,7 +853,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 {
     /* https://issues.apache.org/jira/browse/CB-11513 */
     NSMutableArray* keysToRemove = [[NSMutableArray alloc] init];
-    
+
     for(id key in [self soundCache]) {
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:key];
         if (audioFile != nil) {
@@ -847,9 +865,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             }
         }
     }
-    
+
     [[self soundCache] removeObjectsForKeys:keysToRemove];
-    
+
     // [[self soundCache] removeAllObjects];
     // [self setSoundCache:nil];
     [self setAvSession:nil];

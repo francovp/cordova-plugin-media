@@ -164,7 +164,8 @@ public class AudioHandler extends CordovaPlugin {
         else if (action.equals("create")) {
             String id = args.getString(0);
             String src = FileHelper.stripFileProtocol(args.getString(1));
-            getOrCreatePlayer(id, src);
+            AudioPlayer ret = getOrCreatePlayer(id, src);
+            callbackContext.sendPluginResult(new PluginResult(status, ret.getVolume()));
         }
         else if (action.equals("release")) {
             boolean b = this.release(args.getString(0));
@@ -255,7 +256,13 @@ public class AudioHandler extends CordovaPlugin {
             if (players.isEmpty()) {
                 onFirstPlayerCreated();
             }
-            ret = new AudioPlayer(this, id, file);
+
+            AudioManager am = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
+            int systemMediaVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC));
+            int systemMediaMaxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            float startVolume = (float)(systemMediaVolume / systemMediaMaxVolume);
+
+            ret = new AudioPlayer(this, id, file, startVolume);
             players.put(id, ret);
         }
         return ret;
