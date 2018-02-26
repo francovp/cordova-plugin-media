@@ -96,6 +96,15 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     private int seekOnPrepared = 0;     // seek to this location once media is prepared
     private int bufferedPercent = 0;
     private float mediaVolume = 1;
+    private boolean playAudioWhenScreenIsLocked = true; // If set to false the playback will be paused when app is paused
+
+    public boolean isPlayAudioWhenScreenIsLocked() {
+    	return playAudioWhenScreenIsLocked;
+    }
+
+    public void setPlayAudioWhenScreenIsLocked(boolean playAudioWhenScreenIsLocked) {
+    	this.playAudioWhenScreenIsLocked = playAudioWhenScreenIsLocked;
+    }
 
     /**
      * Constructor.
@@ -103,11 +112,12 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      * @param handler           The audio handler object
      * @param id                The id of this audio player
      */
-    public AudioPlayer(AudioHandler handler, String id, String file, float startVolume) {
+    public AudioPlayer(AudioHandler handler, String id, String file, boolean playAudioWhenScreenIsLocked, float startVolume) {
         this.handler = handler;
         this.id = id;
         this.audioFile = file;
         this.tempFiles = new LinkedList<String>();
+        this.playAudioWhenScreenIsLocked = playAudioWhenScreenIsLocked;
         this.mediaVolume = startVolume;
     }
 
