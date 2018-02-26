@@ -660,6 +660,10 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     if ((audioFile != nil) && (audioFile.player != nil) && [audioFile.player isPlaying]) {
         position = round(audioFile.player.currentTime * 1000) / 1000;
     }
+    else if ((audioFile.recorder != nil) && [audioFile.recorder isRecording]) {
+        position = round(audioFile.recorder.currentTime * 1000) / 1000;
+    }
+
     if (avPlayer) {
        CMTime time = [avPlayer currentTime];
        position = CMTimeGetSeconds(time);
