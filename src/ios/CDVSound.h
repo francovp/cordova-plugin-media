@@ -117,6 +117,7 @@ typedef NSUInteger CDVMediaMsg;
 - (void)startRecordingAudio:(CDVInvokedUrlCommand*)command;
 - (void)stopRecordingAudio:(CDVInvokedUrlCommand*)command;
 - (void)getCurrentAmplitudeAudio:(CDVInvokedUrlCommand*)command;
+- (void)getBufferedPercentAudio:(CDVInvokedUrlCommand*)command;
 
 - (void)getVolume:(CDVInvokedUrlCommand*)command;
 - (void)setVolume:(CDVInvokedUrlCommand*)command;

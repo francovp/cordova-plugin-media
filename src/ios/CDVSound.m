@@ -265,6 +265,9 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             // Pass the AVPlayerItem to a new player
             avPlayer = [[AVPlayer alloc] initWithPlayerItem:playerItem];
 
+            if ([NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10,0,0}]) {
+              avPlayer.automaticallyWaitsToMinimizeStalling = NO;
+            }
             //avPlayer = [[AVPlayer alloc] initWithURL:resourceUrl];
         }
 
@@ -662,6 +665,10 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
        position = CMTimeGetSeconds(time);
     }
 
+    if (isnan(position)) {
+      position = -1;
+    }
+
     CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:position];
 
     [self onStatus:MEDIA_POSITION mediaId:mediaId param:@(position)];
@@ -897,6 +904,14 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
     }
 
     [[self soundCache] removeAllObjects];
+}
+
+- (void)getBufferedPercentAudio:(CDVInvokedUrlCommand*)command
+{
+    // Not implemented
+    float buffered = 0;
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:buffered];
+    [self.commandDelegate sendPluginResult:result callbackId:callbackId];
 }
 
 - (void)getCurrentAmplitudeAudio:(CDVInvokedUrlCommand*)command

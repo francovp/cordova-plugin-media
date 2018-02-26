@@ -20,6 +20,7 @@ package org.apache.cordova.media;
 
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.MediaPlayer.OnBufferingUpdateListener;
 import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnErrorListener;
 import android.media.MediaPlayer.OnPreparedListener;
@@ -48,7 +49,7 @@ import java.util.LinkedList;
  *      android_asset:      file name must start with /android_asset/sound.mp3
  *      sdcard:             file name is just sound.mp3
  */
-public class AudioPlayer implements OnCompletionListener, OnPreparedListener, OnErrorListener {
+public class AudioPlayer implements OnCompletionListener, OnPreparedListener, OnErrorListener, OnBufferingUpdateListener {
 
     // AudioPlayer modes
     public enum MODE { NONE, PLAY, RECORD };
@@ -68,6 +69,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     private static int MEDIA_STATE = 1;
     private static int MEDIA_DURATION = 2;
     private static int MEDIA_POSITION = 3;
+    private static int MEDIA_BUFFERING = 4;
     private static int MEDIA_ERROR = 9;
 
     // Media error codes
@@ -92,6 +94,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     private MediaPlayer player = null;      // Audio player object
     private boolean prepareOnly = true;     // playback after file prepare flag
     private int seekOnPrepared = 0;     // seek to this location once media is prepared
+    private int bufferedPercent = 0;
     private float mediaVolume = 1;
 
     /**
@@ -144,10 +147,12 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      * @param file              The name of the file
      */
     public void startRecording(String file) {
+        String errorMessage;
         switch (this.mode) {
         case PLAY:
-            LOG.d(LOG_TAG, "AudioPlayer Error: Can't record in play mode.");
-            sendErrorStatus(MEDIA_ERR_ABORTED);
+            errorMessage = "AudioPlayer Error: Can't record in play mode.";
+            LOG.d(LOG_TAG, errorMessage);
+            sendErrorStatus(MEDIA_ERR_ABORTED, errorMessage);
             break;
         case NONE:
             this.audioFile = file;
@@ -171,8 +176,9 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
             sendErrorStatus(MEDIA_ERR_ABORTED);
             break;
         case RECORD:
-            LOG.d(LOG_TAG, "AudioPlayer Error: Already recording.");
-            sendErrorStatus(MEDIA_ERR_ABORTED);
+            errorMessage = "AudioPlayer Error: Already recording.";
+            LOG.d(LOG_TAG, errorMessage);
+            sendErrorStatus(MEDIA_ERR_ABORTED, errorMessage);
         }
     }
 
@@ -337,8 +343,9 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
             this.setState(STATE.MEDIA_PAUSED);
         }
         else {
-            LOG.d(LOG_TAG, "AudioPlayer Error: pausePlaying() called during invalid state: " + this.state.ordinal());
-            sendErrorStatus(MEDIA_ERR_NONE_ACTIVE);
+            String errorMessage = "AudioPlayer Error: pausePlaying() called during invalid state: " + this.state.ordinal();
+            LOG.d(LOG_TAG, errorMessage);
+            sendErrorStatus(MEDIA_ERR_NONE_ACTIVE, errorMessage);
         }
     }
 
@@ -348,13 +355,16 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     public void stopPlaying() {
         if ((this.state == STATE.MEDIA_RUNNING) || (this.state == STATE.MEDIA_PAUSED)) {
             this.player.pause();
-            this.player.seekTo(0);
+            if (this.player.getDuration() > 0) {
+              this.player.seekTo(0);
+            }
             LOG.d(LOG_TAG, "stopPlaying is calling stopped");
             this.setState(STATE.MEDIA_STOPPED);
         }
         else {
-            LOG.d(LOG_TAG, "AudioPlayer Error: stopPlaying() called during invalid state: " + this.state.ordinal());
-            sendErrorStatus(MEDIA_ERR_NONE_ACTIVE);
+            String errorMessage = "AudioPlayer Error: stopPlaying() called during invalid state: " + this.state.ordinal();
+            LOG.d(LOG_TAG, errorMessage);
+            sendErrorStatus(MEDIA_ERR_NONE_ACTIVE, errorMessage);
         }
     }
 
@@ -446,8 +456,12 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     public void onPrepared(MediaPlayer player) {
         // Listen for playback completion
         this.player.setOnCompletionListener(this);
-        // seek to any location received while not prepared
-        this.seekToPlaying(this.seekOnPrepared);
+
+        if (this.player.getDuration() > 0) {
+          // seek to any location received while not prepared
+          this.seekToPlaying(this.seekOnPrepared);
+        }
+
         // If start playing after prepared
         if (!this.prepareOnly) {
             this.player.start();
@@ -483,14 +497,15 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      * @param arg2              an extra code, specific to the error.
      */
     public boolean onError(MediaPlayer player, int arg1, int arg2) {
-        LOG.d(LOG_TAG, "AudioPlayer.onError(" + arg1 + ", " + arg2 + ")");
+        String errorMessage = "AudioPlayer.onError(" + arg1 + ", " + arg2 + ")";
+        LOG.d(LOG_TAG, errorMessage);
 
         // we don't want to send success callback
         // so we don't call setState() here
         this.state = STATE.MEDIA_STOPPED;
         this.destroy();
         // Send error notification to JavaScript
-        sendErrorStatus(arg1);
+        sendErrorStatus(arg1, errorMessage);
 
         return false;
     }
@@ -548,8 +563,9 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
         if (this.player != null) {
             this.player.setVolume(volume, volume);
         } else {
-            LOG.d(LOG_TAG, "AudioPlayer Error: Cannot set volume until the audio file is initialized.");
-            sendErrorStatus(MEDIA_ERR_NONE_ACTIVE);
+            String errorMessage = "AudioPlayer Error: Cannot set volume until the audio file is initialized.";
+            LOG.d(LOG_TAG, errorMessage);
+            sendErrorStatus(MEDIA_ERR_NONE_ACTIVE, errorMessage);
         }
     }
 
@@ -565,8 +581,9 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
         case PLAY:
             break;
         case RECORD:
-            LOG.d(LOG_TAG, "AudioPlayer Error: Can't play in record mode.");
-            sendErrorStatus(MEDIA_ERR_ABORTED);
+            String errorMessage = "AudioPlayer Error: Can't play in record mode.";
+            LOG.d(LOG_TAG, errorMessage);
+            sendErrorStatus(MEDIA_ERR_ABORTED, errorMessage);
             return false; //player is not ready
         }
         return true;
@@ -588,7 +605,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
                     try {
                         this.loadAudioFile(file);
                     } catch (Exception e) {
-                        sendErrorStatus(MEDIA_ERR_ABORTED);
+                        sendErrorStatus(MEDIA_ERR_ABORTED, e.getMessage());
                     }
                     return false;
                 case MEDIA_LOADING:
@@ -612,7 +629,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
                             try {
                                 this.loadAudioFile(file);
                             } catch (Exception e) {
-                                sendErrorStatus(MEDIA_ERR_ABORTED);
+                                sendErrorStatus(MEDIA_ERR_ABORTED, e.getMessage());
                             }
                             return false;//we´re not ready yet
                         }
@@ -628,14 +645,15 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
                         try {
                             this.loadAudioFile(file);
                         } catch (Exception e) {
-                            sendErrorStatus(MEDIA_ERR_ABORTED);
+                            sendErrorStatus(MEDIA_ERR_ABORTED, e.getMessage());
                         }
                         //if we had to prepare the file, we won't be in the correct state for playback
                         return false;
                     }
                 default:
-                    LOG.d(LOG_TAG, "AudioPlayer Error: startPlaying() called during invalid state: " + this.state);
-                    sendErrorStatus(MEDIA_ERR_ABORTED);
+                    String errorMessage = "AudioPlayer Error: startPlaying() called during invalid state: " + this.state;
+                    LOG.d(LOG_TAG, errorMessage);
+                    sendErrorStatus(MEDIA_ERR_ABORTED, errorMessage);
             }
         }
         return false;
@@ -656,6 +674,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
             this.setMode(MODE.PLAY);
             this.setState(STATE.MEDIA_STARTING);
             this.player.setOnPreparedListener(this);
+            this.player.setOnBufferingUpdateListener(this);
             this.player.prepareAsync();
         }
         else {
@@ -687,6 +706,23 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     private void sendErrorStatus(int errorCode) {
         sendStatusChange(MEDIA_ERROR, errorCode, null);
     }
+
+    private void sendErrorStatus(Integer errorCode, String errorMessage) {
+        LOG.d(LOG_TAG, errorMessage);
+        JSONObject statusDetails = new JSONObject();
+        try {
+            statusDetails.put("id", this.id);
+            statusDetails.put("msgType", MEDIA_ERROR);
+            JSONObject code = new JSONObject();
+            error.put("code", errorCode);
+            error.put("message", errorMessage);
+            statusDetails.put("value", error);
+        } catch (JSONException e) {
+            LOG.e(LOG_TAG, "Failed to create status details", e);
+        }
+        this.handler.sendEventMessage("status", statusDetails);
+    }
+
 
     private void sendStatusChange(int messageType, Integer additionalCode, Float value) {
 
@@ -730,5 +766,17 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
             }
         }
         return 0;
+    }
+
+
+    @Override
+    public void onBufferingUpdate(MediaPlayer mp, int percent) {
+    	// TODO Auto-generated method stub
+    	bufferedPercent = percent;
+      sendStatusChange(MEDIA_BUFFERING, null, (float)bufferedPercent);
+    }
+
+    public int getBufferedPercent() {
+    	return bufferedPercent;
     }
 }

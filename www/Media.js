@@ -50,6 +50,7 @@ var Media = function(src, successCallback, errorCallback, statusCallback, create
     this.createCallback = createCallback;
     this._duration = -1;
     this._position = -1;
+    this._bufferedPercent = 0;
     exec(this.createCallback, this.errorCallback, "Media", "create", [this.id, this.src]);
 };
 
@@ -57,6 +58,7 @@ var Media = function(src, successCallback, errorCallback, statusCallback, create
 Media.MEDIA_STATE = 1;
 Media.MEDIA_DURATION = 2;
 Media.MEDIA_POSITION = 3;
+Media.MEDIA_BUFFERING = 3;
 Media.MEDIA_ERROR = 9;
 
 // Media states
@@ -197,6 +199,17 @@ Media.prototype.getCurrentAmplitude = function(success, fail) {
 };
 
 /**
+ * Get buffered percent of audio.
+ */
+Media.prototype.getBufferedPercent = function(success, fail) {
+    var me = this;
+    exec(function(p) {
+        success(p);
+    }, fail, "Media", "getBufferedPercentAudio", [this.id]);
+};
+
+
+/**
  * Audio has status update.
  * PRIVATE
  *
@@ -230,6 +243,9 @@ Media.onStatus = function(id, msgType, value) {
                 break;
             case Media.MEDIA_POSITION :
                 media._position = Number(value);
+                break;
+            case Media.MEDIA_BUFFERING:
+                media._bufferedPercent = Number(value);
                 break;
             default :
                 if (console.error) {
