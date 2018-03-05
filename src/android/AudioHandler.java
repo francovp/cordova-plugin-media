@@ -284,8 +284,8 @@ public class AudioHandler extends CordovaPlugin {
             }
 
             AudioManager am = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
-            int systemMediaVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC));
-            int systemMediaMaxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            int systemMediaVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+            int systemMediaMaxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
             float startVolume = (float)(systemMediaVolume / systemMediaMaxVolume);
 
             ret = new AudioPlayer(this, id, file, playAudioWhenScreenIsLocked, startVolume);
