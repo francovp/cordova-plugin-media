@@ -559,7 +559,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      *
      * @param volume
      */
-    public void getVolume() {
+    public float getVolume() {
         return this.mediaVolume;
     }
 
@@ -723,7 +723,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
         try {
             statusDetails.put("id", this.id);
             statusDetails.put("msgType", MEDIA_ERROR);
-            JSONObject code = new JSONObject();
+            JSONObject error = new JSONObject();
             error.put("code", errorCode);
             error.put("message", errorMessage);
             statusDetails.put("value", error);
