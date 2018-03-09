@@ -29,7 +29,7 @@
 
 BOOL keepAvAudioSessionAlwaysActive = NO;
 
-@synthesize soundCache, avSession, currMediaId, statusCallbackId;
+@synthesize soundCache, avSession, currMediaId, statusCallbackId, volume;
 
 -(void) pluginInitialize
 {
@@ -277,6 +277,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
           volume = [[AVAudioSession sharedInstance] outputVolume]; // The linear 0.0 .. 1.0 value
         }
         self.volume = [NSNumber numberWithFloat:volume];
+        audioFile.volume = [NSNumber numberWithFloat:volume];
 
         CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:volume];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
@@ -913,6 +914,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 - (void)getBufferedPercentAudio:(CDVInvokedUrlCommand*)command
 {
     // Not implemented
+    NSString* callbackId = command.callbackId;
     float buffered = 0;
     CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:buffered];
     [self.commandDelegate sendPluginResult:result callbackId:callbackId];
