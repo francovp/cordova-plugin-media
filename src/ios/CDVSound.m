@@ -29,7 +29,7 @@
 
 BOOL keepAvAudioSessionAlwaysActive = NO;
 
-@synthesize soundCache, avSession, currMediaId, statusCallbackId, volume;
+@synthesize soundCache, avSession, currMediaId, statusCallbackId;
 
 -(void) pluginInitialize
 {
@@ -276,7 +276,6 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
         if ([self hasAudioSession]) {
           volume = [[AVAudioSession sharedInstance] outputVolume]; // The linear 0.0 .. 1.0 value
         }
-        self.volume = [NSNumber numberWithFloat:volume];
         audioFile.volume = [NSNumber numberWithFloat:volume];
 
         CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:volume];
@@ -287,14 +286,12 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 - (void)getVolume:(CDVInvokedUrlCommand*)command
 {
     NSString* callbackId = command.callbackId;
-    float volume = [self.volume floatValue];
+    float volume = [self.currentVolume floatValue];
 
     // don't care for any callbacks
     CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDouble:volume];
     [self.commandDelegate sendPluginResult:result callbackId:callbackId];
 }
-
-
 
 - (void)setVolume:(CDVInvokedUrlCommand*)command
 {
@@ -308,14 +305,14 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
         CDVAudioFile* audioFile = [[self soundCache] objectForKey:mediaId];
         if (audioFile != nil) {
             audioFile.volume = volume;
-            self.volume = volume;
+            self.currentVolume = volume;
             if (audioFile.player) {
                 audioFile.player.volume = [volume floatValue];
             }
             else {
                 float customVolume = [volume floatValue];
                 if (customVolume >= 0.0 && customVolume <= 1.0) {
-                    self.volume = [NSNumber numberWithFloat:customVolume];
+                    self.currentVolume = [NSNumber numberWithFloat:customVolume];
                     [avPlayer setVolume: customVolume];
                 }
                 else {
