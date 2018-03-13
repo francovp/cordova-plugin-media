@@ -35,7 +35,8 @@ enum CDVMediaStates {
     MEDIA_STARTING = 1,
     MEDIA_RUNNING = 2,
     MEDIA_PAUSED = 3,
-    MEDIA_STOPPED = 4
+    MEDIA_STOPPED = 4,
+    MEDIA_STATE_ERROR = 9
 };
 typedef NSUInteger CDVMediaStates;
 
@@ -43,6 +44,7 @@ enum CDVMediaMsg {
     MEDIA_STATE = 1,
     MEDIA_DURATION = 2,
     MEDIA_POSITION = 3,
+    MEDIA_BUFFERING = 4,
     MEDIA_ERROR = 9
 };
 typedef NSUInteger CDVMediaMsg;
@@ -95,6 +97,7 @@ typedef NSUInteger CDVMediaMsg;
 @property (nonatomic, strong) NSString* currMediaId;
 @property (nonatomic, strong) NSString* statusCallbackId;
 @property (nonatomic, strong) NSNumber* currentVolume;
+@property (nonatomic, strong) id playerStatusObserver;
 
 - (void)startPlayingAudio:(CDVInvokedUrlCommand*)command;
 - (void)pausePlayingAudio:(CDVInvokedUrlCommand*)command;

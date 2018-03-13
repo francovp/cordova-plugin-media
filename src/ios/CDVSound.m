@@ -25,6 +25,10 @@
 #define HTTPS_SCHEME_PREFIX @"https://"
 #define CDVFILE_PREFIX @"cdvfile://"
 
+static char PlayerItemContext;
+static char PlayerItemDurationContext;
+static char kTimeRangesKVO;
+
 @implementation CDVSound
 
 BOOL keepAvAudioSessionAlwaysActive = NO;
@@ -256,13 +260,20 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
             // First create an AVPlayerItem
             AVPlayerItem* playerItem = [AVPlayerItem playerItemWithURL:resourceUrl];
 
+            NSKeyValueObservingOptions options = NSKeyValueObservingOptionOld | NSKeyValueObservingOptionNew;
+            // Register as an observer of the player item's status property
+            [playerItem addObserver:self forKeyPath:@"status" options:options context:&PlayerItemContext];
+            [playerItem addObserver:self forKeyPath:@"duration" options:options context:&PlayerItemDurationContext];
+            [playerItem addObserver:self forKeyPath:@"loadedTimeRanges" options:options context:&kTimeRangesKVO];
+
             // Subscribe to the AVPlayerItem's DidPlayToEndTime notification.
             [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(itemDidFinishPlaying:) name:AVPlayerItemDidPlayToEndTimeNotification object:playerItem];
 
             // Subscribe to the AVPlayerItem's PlaybackStalledNotification notification.
             [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(itemStalledPlaying:) name:AVPlayerItemPlaybackStalledNotification object:playerItem];
 
-            // Pass the AVPlayerItem to a new player
+            // Pass the AVPlayerItem to a new player. This is the point at which the AVPlayerItem begins
+            // trying to load the media URL it has been provided.
             avPlayer = [[AVPlayer alloc] initWithPlayerItem:playerItem];
 
             if ([NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10,0,0}]) {
@@ -394,6 +405,7 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
                     bError = YES;
                 }
             }
+
             if (!bError) {
                 NSLog(@"Playing audio sample '%@'", audioFile.resourcePath);
                 double duration = 0;
@@ -844,6 +856,26 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
      }
 }
 
+// It seems this is not called. We will use the status observable instead.
+//- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer*)player error:(NSError*)error
+//{
+//    CDVAudioPlayer* aPlayer = (CDVAudioPlayer*)player;
+//    NSString* mediaId = aPlayer.mediaId;
+//    CDVAudioFile* audioFile = [[self soundCache] objectForKey:mediaId];
+//
+//    NSString* errorMsg = @"";
+//    // NSLog(@"error creating audio session: %@", [[error userInfo] description]);
+//    if (audioFile != nil) {
+//        NSLog(@"Error playing audio track: '%@'", audioFile.resourcePath);
+//        errorMsg = [NSString stringWithFormat:@"Error playing audio track: '%1$@', because: %2$@", audioFile.resourcePath, [error localizedFailureReason]];
+//    } else {
+//        NSLog(@"Error playing audio track");
+//        errorMsg = [NSString stringWithFormat:@"Error playing audio track: %@", [error localizedFailureReason]];
+//    }
+//
+//    [self onStatus:MEDIA_ERROR mediaId:mediaId param:[self createMediaErrorWithCode:MEDIA_ERR_DECODE message:errorMsg]];
+//}
+
 -(void)itemDidFinishPlaying:(NSNotification *) notification {
     // Will be called when AVPlayer finishes playing playerItem
     NSString* mediaId = self.currMediaId;
@@ -857,6 +889,73 @@ BOOL keepAvAudioSessionAlwaysActive = NO;
 -(void)itemStalledPlaying:(NSNotification *) notification {
     // Will be called when playback stalls due to buffer empty
     NSLog(@"Stalled playback");
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                      change:(NSDictionary<NSString *,id> *)change
+                      context:(void *)context
+{
+    // Only handle observations for the PlayerItemContext
+    if (context != &PlayerItemContext && context != &PlayerItemDurationContext && context != &kTimeRangesKVO) {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+        return;
+    }
+
+    AVPlayerItem *playerItem = (AVPlayerItem*)object;
+    NSString* mediaId = self.currMediaId;
+
+    if ([keyPath isEqualToString:@"status"]) {
+        AVPlayerItemStatus status = AVPlayerItemStatusUnknown;
+        // Get the status change from the change dictionary
+        NSNumber *statusNumber = change[NSKeyValueChangeNewKey];
+        if ([statusNumber isKindOfClass:[NSNumber class]]) {
+            status = statusNumber.integerValue;
+        }
+
+        // Switch over the status
+        switch (status) {
+            case AVPlayerItemStatusReadyToPlay:
+                NSLog(@"PlayerItem status changed to AVPlayerItemStatusReadyToPlay");
+                break;
+            case AVPlayerItemStatusFailed: {
+                NSLog(@"PlayerItem status changed to AVPlayerItemStatusFailed");
+                // Failed. Examine AVPlayerItem.error
+                NSLog(@"Error playing audio track");
+                NSString* errorMsg = @"";
+                if (playerItem.error) {
+                    errorMsg = [NSString stringWithFormat:@"Error playing audio track: %@", [playerItem.error localizedFailureReason]];
+                }
+                [self onStatus:MEDIA_ERROR mediaId:mediaId param:[self createMediaErrorWithCode:MEDIA_ERR_DECODE message:errorMsg]];
+                break;
+            }
+            case AVPlayerItemStatusUnknown:
+                NSLog(@"PlayerItem status changed to AVPlayerItemStatusUnknown");
+                // Not ready
+                break;
+        }
+    }
+
+    if ([keyPath isEqualToString:@"duration"]) {
+        // NSLog(@"Duration is indefinite: %hhu", CMTIME_IS_INDEFINITE(playerItem.duration));
+        if (!CMTIME_IS_INDEFINITE(playerItem.duration)) {
+            NSLog(@"The track duration was changed: %f", CMTimeGetSeconds(playerItem.duration));
+            [self onStatus:MEDIA_DURATION mediaId:mediaId param:@(CMTimeGetSeconds(playerItem.duration))];
+        }
+    }
+
+    if ([keyPath isEqualToString:@"loadedTimeRanges"]) {
+        if (!CMTIME_IS_INDEFINITE(playerItem.duration)) {
+            float duration = CMTimeGetSeconds(playerItem.duration);
+            NSArray *timeRanges = (NSArray *)[change objectForKey:NSKeyValueChangeNewKey];
+            if (timeRanges && [timeRanges count]) {
+                CMTimeRange timerange = [[timeRanges objectAtIndex:0] CMTimeRangeValue];
+                float rangeEnd = CMTimeGetSeconds(timerange.duration);
+                NSLog(@" . . . %.5f -> %.5f (%.1f %%)", CMTimeGetSeconds(timerange.start), CMTimeGetSeconds(CMTimeAdd(timerange.start, timerange.duration)), (rangeEnd / duration)*100.0);
+                [self onStatus:MEDIA_BUFFERING mediaId:mediaId param:@((rangeEnd / duration))];
+            }
+        }
+    }
 }
 
 - (void)onMemoryWarning
