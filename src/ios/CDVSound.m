@@ -29,7 +29,7 @@
 
 BOOL keepAvAudioSessionAlwaysActive = NO;
 
-@synthesize soundCache, avSession, currMediaId, statusCallbackId;
+@synthesize soundCache, avSession, currMediaId, statusCallbackId, currentVolume;
 
 -(void) pluginInitialize
 {
