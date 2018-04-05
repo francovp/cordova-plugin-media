@@ -57,8 +57,10 @@ public class AudioHandler extends CordovaPlugin {
 
     public static String TAG = "AudioHandler";
     HashMap<String, AudioPlayer> players;  // Audio player object
-    ArrayList<AudioPlayer> pausedForPhone; // Audio players that were paused when phone call came in
-    ArrayList<AudioPlayer> pausedForFocus; // Audio players that were paused when focus was lost
+    ArrayList<AudioPlayer> paused; // Audio players that were paused. Reasons:
+    boolean audioFocusLost = false; // paused when audiofocus was lost
+    boolean calling = false; // paused when calling
+    boolean activityFocusLost = false; // paused when activity got paused
     private int origVolumeStream = -1;
     private CallbackContext messageChannel;
 
@@ -77,8 +79,7 @@ public class AudioHandler extends CordovaPlugin {
      */
     public AudioHandler() {
         this.players = new HashMap<String, AudioPlayer>();
-        this.pausedForPhone = new ArrayList<AudioPlayer>();
-        this.pausedForFocus = new ArrayList<AudioPlayer>();
+        this.paused = new ArrayList<AudioPlayer>();
     }
 
 
@@ -129,13 +130,21 @@ public class AudioHandler extends CordovaPlugin {
         else if (action.equals("startPlayingAudio")) {
             String target = args.getString(1);
             String fileUriStr;
+            boolean playAudioWhenScreenIsLocked=true;
             try {
                 Uri targetUri = resourceApi.remapUri(Uri.parse(target));
                 fileUriStr = targetUri.toString();
             } catch (IllegalArgumentException e) {
                 fileUriStr = target;
             }
-            this.startPlayingAudio(args.getString(0), FileHelper.stripFileProtocol(fileUriStr));
+            // this.startPlayingAudio(args.getString(0), FileHelper.stripFileProtocol(fileUriStr));
+            try {
+                JSONObject playArgs = new JSONObject(args.getString(2));
+                playAudioWhenScreenIsLocked = playArgs.getBoolean("playAudioWhenScreenIsLocked");
+            } catch (JSONException e) {
+                playAudioWhenScreenIsLocked = true;
+            }
+            this.startPlayingAudio(args.getString(0), FileHelper.stripFileProtocol(fileUriStr), playAudioWhenScreenIsLocked);
         }
         else if (action.equals("seekToAudio")) {
             this.seekToAudio(args.getString(0), args.getInt(1));
@@ -161,10 +170,16 @@ public class AudioHandler extends CordovaPlugin {
             callbackContext.sendPluginResult(new PluginResult(status, f));
             return true;
         }
+        else if (action.equals("getBufferedPercentAudio")) {
+            int f = this.getBufferedPercentAudio(args.getString(0));
+            callbackContext.sendPluginResult(new PluginResult(status, f));
+            return true;
+        }
         else if (action.equals("create")) {
             String id = args.getString(0);
             String src = FileHelper.stripFileProtocol(args.getString(1));
-            getOrCreatePlayer(id, src);
+            AudioPlayer ret = getOrCreatePlayer(id, src);
+            callbackContext.sendPluginResult(new PluginResult(status, ret.getVolume()));
         }
         else if (action.equals("release")) {
             boolean b = this.release(args.getString(0));
@@ -225,21 +240,29 @@ public class AudioHandler extends CordovaPlugin {
             if ("ringing".equals(data) || "offhook".equals(data)) {
 
                 // Get all audio players and pause them
-                for (AudioPlayer audio : this.players.values()) {
-                    if (audio.getState() == AudioPlayer.STATE.MEDIA_RUNNING.ordinal()) {
-                        this.pausedForPhone.add(audio);
-                        audio.pausePlaying();
-                    }
-                }
-
+                // for (AudioPlayer audio : this.players.values()) {
+                //     if (audio.getState() == AudioPlayer.STATE.MEDIA_RUNNING.ordinal()) {
+                //         this.pausedForPhone.add(audio);
+                //         audio.pausePlaying();
+                //     }
+                // }
+                calling = true;
+                pauseAll();
             }
 
             // If phone idle, then resume playing those players we paused
             else if ("idle".equals(data)) {
-                for (AudioPlayer audio : this.pausedForPhone) {
-                    audio.startPlaying(null);
+                // for (AudioPlayer audio : this.pausedForPhone) {
+                //     audio.startPlaying(null);
+                // }
+                // this.pausedForPhone.clear();
+                if(!audioFocusLost){
+                  if (activityFocusLost) {
+                    resumePlayingMarked();
+                  } else {
+                    resumePlayingAll();
+                  }
                 }
-                this.pausedForPhone.clear();
             }
         }
         return null;
@@ -250,14 +273,25 @@ public class AudioHandler extends CordovaPlugin {
     //--------------------------------------------------------------------------
 
     private AudioPlayer getOrCreatePlayer(String id, String file) {
+      return getOrCreatePlayer(id, file, true);
+    }
+
+    private AudioPlayer getOrCreatePlayer(String id, String file, boolean playAudioWhenScreenIsLocked) {
         AudioPlayer ret = players.get(id);
         if (ret == null) {
             if (players.isEmpty()) {
                 onFirstPlayerCreated();
             }
-            ret = new AudioPlayer(this, id, file);
+
+            AudioManager am = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
+            int systemMediaVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+            int systemMediaMaxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            float startVolume = (float)(systemMediaVolume / systemMediaMaxVolume);
+
+            ret = new AudioPlayer(this, id, file, playAudioWhenScreenIsLocked, startVolume);
             players.put(id, ret);
         }
+        ret.setPlayAudioWhenScreenIsLocked(playAudioWhenScreenIsLocked);
         return ret;
     }
 
@@ -315,8 +349,8 @@ public class AudioHandler extends CordovaPlugin {
      * @param id				The id of the audio player
      * @param file				The name of the audio file.
      */
-    public void startPlayingAudio(String id, String file) {
-        AudioPlayer audio = getOrCreatePlayer(id, file);
+    public void startPlayingAudio(String id, String file, boolean playAudioWhenScreenIsLocked) {
+        AudioPlayer audio = getOrCreatePlayer(id, file, playAudioWhenScreenIsLocked);
         audio.startPlaying(file);
         getAudioFocus();
     }
@@ -379,6 +413,20 @@ public class AudioHandler extends CordovaPlugin {
         return audio.getDuration(file);
     }
 
+
+    /**
+      * Get percentage of buffered data of playback.
+      * @param id				The id of the audio player
+      * @return 					buffered data in percentage
+      */
+    public int getBufferedPercentAudio(String id) {
+        AudioPlayer audio = this.players.get(id);
+        if (audio != null) {
+            return audio.getBufferedPercent();
+        }
+        return 0;
+    }
+
     /**
      * Set the audio device to be used for playback.
      *
@@ -400,21 +448,71 @@ public class AudioHandler extends CordovaPlugin {
         }
     }
 
-    public void pauseAllLostFocus() {
+    // public void pauseAllLostFocus() {
+    //     for (AudioPlayer audio : this.players.values()) {
+    //         if (audio.getState() == AudioPlayer.STATE.MEDIA_RUNNING.ordinal()) {
+    //             this.pausedForFocus.add(audio);
+    //             audio.pausePlaying();
+    //         }
+    //     }
+    // }
+
+    // public void resumeAllGainedFocus() {
+    //     for (AudioPlayer audio : this.pausedForFocus) {
+    //         audio.resumePlaying();
+    //     }
+    //     this.pausedForFocus.clear();
+    // }
+
+
+    /**
+     * This method pauses all AudioPlayers.
+     * */
+    public void pauseAll() {
         for (AudioPlayer audio : this.players.values()) {
             if (audio.getState() == AudioPlayer.STATE.MEDIA_RUNNING.ordinal()) {
-                this.pausedForFocus.add(audio);
+                this.paused.add(audio);
                 audio.pausePlaying();
             }
         }
     }
 
-    public void resumeAllGainedFocus() {
-        for (AudioPlayer audio : this.pausedForFocus) {
+    /**
+     * This method pauses all AudioPlayers not marked with isPlayAudioWhenScreenIsLocked.
+     * */
+    public void pauseAudiosNotMarked() {
+        for (AudioPlayer audio : this.players.values()) {
+            if (audio.getState() == AudioPlayer.STATE.MEDIA_RUNNING.ordinal() && !audio.isPlayAudioWhenScreenIsLocked()) {
+                this.paused.add(audio);
+                audio.pausePlaying();
+            }
+        }
+    }
+
+    /**
+     * Resume playing all paused audios
+     */
+    public void resumePlayingAll() {
+        for (AudioPlayer audio : this.paused) {
             audio.resumePlaying();
         }
-        this.pausedForFocus.clear();
+        paused.clear();
     }
+
+    /**
+     * Resume playing all audios marked with isPlayAudioWhenScreenIsLocked
+     */
+    public void resumePlayingMarked() {
+    	ArrayList<AudioPlayer> remove = new ArrayList<AudioPlayer>();
+        for (AudioPlayer audio : this.paused) {
+        	if(audio.isPlayAudioWhenScreenIsLocked()){
+        		audio.resumePlaying();
+        		remove.add(audio);
+        	}
+        }
+        paused.removeAll(remove);
+    }
+
 
     /**
      * Get the the audio focus
@@ -425,10 +523,18 @@ public class AudioHandler extends CordovaPlugin {
                 case (AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) :
                 case (AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) :
                 case (AudioManager.AUDIOFOCUS_LOSS) :
-                    pauseAllLostFocus();
+                    pauseAll();
+                    audioFocusLost = true;
                     break;
                 case (AudioManager.AUDIOFOCUS_GAIN):
-                    resumeAllGainedFocus();
+                 		if (!calling) {
+                 			if (activityFocusLost){
+                 				resumePlayingMarked();
+                 			} else {
+                        resumePlayingAll();
+                 			}
+      				      }
+                    audioFocusLost =  false;
                     break;
                 default:
                     break;
@@ -551,6 +657,23 @@ public class AudioHandler extends CordovaPlugin {
             getMicPermission(RECORD_AUDIO);
         }
 
+    }
+
+
+    @Override
+    public void onResume(boolean multitasking) {
+      super.onResume(multitasking);
+      if (!(audioFocusLost||calling)) {
+        resumePlayingAll();
+      }
+      activityFocusLost = false;
+    }
+
+    @Override
+    public void onPause(boolean multitasking) {
+      activityFocusLost = true;
+      pauseAudiosNotMarked();
+      super.onPause(multitasking);
     }
 
     /**

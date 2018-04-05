@@ -36,8 +36,10 @@ var mediaObjects = {};
  *                                  errorCallback(int errorCode) - OPTIONAL
  * @param statusCallback        The callback to be called when media status has changed.
  *                                  statusCallback(int statusCode) - OPTIONAL
+ * @param createCallback        The callback to be called when media object is created / retrieved.
+ *                                  createCallback(float volume) - OPTIONAL
  */
-var Media = function(src, successCallback, errorCallback, statusCallback) {
+var Media = function(src, successCallback, errorCallback, statusCallback, createCallback) {
     argscheck.checkArgs('sFFF', 'Media', arguments);
     this.id = utils.createUUID();
     mediaObjects[this.id] = this;
@@ -45,15 +47,18 @@ var Media = function(src, successCallback, errorCallback, statusCallback) {
     this.successCallback = successCallback;
     this.errorCallback = errorCallback;
     this.statusCallback = statusCallback;
+    this.createCallback = createCallback;
     this._duration = -1;
     this._position = -1;
-    exec(null, this.errorCallback, "Media", "create", [this.id, this.src]);
+    this._bufferedPercent = 0;
+    exec(this.createCallback, this.errorCallback, "Media", "create", [this.id, this.src]);
 };
 
 // Media messages
 Media.MEDIA_STATE = 1;
 Media.MEDIA_DURATION = 2;
 Media.MEDIA_POSITION = 3;
+Media.MEDIA_BUFFERING = 4;
 Media.MEDIA_ERROR = 9;
 
 // Media states
@@ -62,7 +67,8 @@ Media.MEDIA_STARTING = 1;
 Media.MEDIA_RUNNING = 2;
 Media.MEDIA_PAUSED = 3;
 Media.MEDIA_STOPPED = 4;
-Media.MEDIA_MSG = ["None", "Starting", "Running", "Paused", "Stopped"];
+Media.MEDIA_STATE_ERROR = 9;
+Media.MEDIA_MSG = ["None", "Starting", "Running", "Paused", "Stopped", "", "", "", "", "Error"];
 
 // "static" function to return existing objs.
 Media.get = function(id) {
@@ -114,6 +120,17 @@ Media.prototype.getDuration = function() {
 };
 
 /**
+ * Get the percent of the track that has been buffered, as reported by the track.
+ * This value is cached. If you want the live value, call getBufferedPercentAudio
+ * That function is not implemented (yet) on iOS.
+ *
+ * @return      bufferedPercent or 0 if not known/loaded.
+ */
+Media.prototype.getBufferedPercent = function() {
+    return this._bufferedPercent;
+};
+
+/**
  * Get position of audio.
  */
 Media.prototype.getCurrentPosition = function(success, fail) {
@@ -160,6 +177,13 @@ Media.prototype.release = function() {
 };
 
 /**
+ * Gets the volume.
+ */
+Media.prototype.getVolume = function(volume) {
+  exec(null, null, "Media", "getVolume", [this.id]);
+};
+
+/**
  * Adjust the volume.
  */
 Media.prototype.setVolume = function(volume) {
@@ -185,6 +209,17 @@ Media.prototype.getCurrentAmplitude = function(success, fail) {
         success(p);
     }, fail, "Media", "getCurrentAmplitudeAudio", [this.id]);
 };
+
+/**
+ * Get buffered percent of audio, direct from the native track.
+ */
+Media.prototype.getBufferedPercentAudio = function(success, fail) {
+    var me = this;
+    exec(function(p) {
+        success(p);
+    }, fail, "Media", "getBufferedPercentAudio", [this.id]);
+};
+
 
 /**
  * Audio has status update.
@@ -217,9 +252,16 @@ Media.onStatus = function(id, msgType, value) {
                 if (media.errorCallback) {
                     media.errorCallback(value);
                 }
+                // Because the error callback won't be called until play is actually called!
+                if (media.statusCallback) {
+                  media.statusCallback(Media.MEDIA_STATE_ERROR, value);
+                }
                 break;
             case Media.MEDIA_POSITION :
                 media._position = Number(value);
+                break;
+            case Media.MEDIA_BUFFERING:
+                media._bufferedPercent = Number(value);
                 break;
             default :
                 if (console.error) {
